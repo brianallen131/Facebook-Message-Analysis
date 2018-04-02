@@ -1,0 +1,182 @@
+---
+title: "Facebook Analysis"
+author: Brian Allen
+date: March 31, 2018
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(warning = FALSE,
+                      message = FALSE, 
+                      cache = FALSE)
+```
+
+---
+
+**$1.$ Facebook Data Introduction**
+
+In light of the recent Facebook data controversies, I decided to pull my personal Facebook message data and explore trends in my interactions with different groups of people. I explored statistics that describe how I interact with people by relationship type and also took a deep dive into select conversations to see how our conversations trended over time.
+
+Note: all your personal Facebook message data can be downloaded from Facebook (instructions can be found here: https://www.facebook.com/help/302796099745838). The data include all messages you either received or sent and who they were sent to.
+
+
+``` {r include=FALSE}
+fb <- read.csv("fb_data_features_sentiment.csv")
+relationships <- read.csv("relationships.csv")
+```
+
+---
+
+**$2.$ High Level Conversation Statistics by Relationship Type**
+
+First, I categorized the top conversations into one of 5 groups: best friends, friends, friend groups, famly, homework groups and love interests. I first wanted to see the distribution of words and messages spoken in these conversations both by everyone in the group as well as personally. I also calculated *my messages initiated*, which I define as all messages that I sent in a conversation that has been idle for at least 24 hours. Each of these distributions were plotted in bar charts below.
+
+
+``` {r include=FALSE}
+library(tidyverse)
+library(dplyr)
+library(ggplot2)
+
+conversations <- fb %>% group_by(conversation_id,conversation_name) %>%
+                        summarize(total_words=sum(msg_word_count),
+                                  total_messages=n(),
+                                  my_words=sum(msg_word_count[user=="Brian Allen"]),
+                                  my_messages=sum(user=="Brian Allen"),
+                                  my_initiated_messages=sum(conversation_init[user=="Brian Allen"]),
+                                  other_initiated_messages=sum(conversation_init[user!="Brian Allen"]),
+                                  total_initiated_messages=sum(conversation_init)) %>%
+                        ungroup() %>%
+                        mutate(my_word_share=my_words/total_words,
+                               my_msg_share=my_messages/total_messages,
+                               share_of_my_msgs_i_initiated=my_initiated_messages/my_messages,
+                               share_of_conv_inits_by_me=my_initiated_messages/total_initiated_messages)
+
+
+conversations.relationships <- merge(x=conversations,y=relationships,by = c("conversation_id","conversation_name"), all.x = TRUE)
+
+relationship.statistics <- conversations.relationships %>% 
+                           filter(relationship!="") %>%
+                           group_by(relationship) %>%
+                           summarize(total_words=sum(total_words),
+                                     total_messages=sum(total_messages),
+                                     my_words=sum(my_words),
+                                     my_messages=sum(my_messages),
+                                     my_initiated_messages=sum(my_initiated_messages),
+                                     other_initiated_messages=sum(other_initiated_messages),
+                                     total_initiated_messages=sum(total_initiated_messages)) %>%
+                           ungroup() %>%
+                           mutate(my_word_share=my_words/total_words,
+                                  my_msg_share=my_messages/total_messages,
+                                  share_of_my_msgs_i_initiated=my_initiated_messages/my_messages,
+                                  share_of_conv_inits_by_me=my_initiated_messages/total_initiated_messages)
+```
+
+``` {r fig.width=10, fig.height=8, include=TRUE ,echo=FALSE}
+library(gridExtra)
+g1 <- ggplot(relationship.statistics, aes(x=reorder(relationship,-total_words),y=total_words)) + 
+          geom_bar(stat="identity") + 
+          ggtitle("Total Words Spoken") +
+          xlab("") + 
+          theme(axis.text.x = element_text(angle = 17, hjust = 1))
+
+g2 <- ggplot(relationship.statistics, aes(x=reorder(relationship,-my_words),y=my_words)) +
+          geom_col(stat="identity") +
+          ggtitle("My Words Spoken") +
+          xlab("") + 
+          theme(axis.text.x = element_text(angle = 17, hjust = 1))
+
+g3 <- ggplot(relationship.statistics, aes(x=reorder(relationship,-my_messages),y=my_messages)) +
+        geom_col(stat="identity") +
+        ggtitle("My Messages Sent") +
+        xlab("Relationship") + 
+        theme(axis.text.x = element_text(angle = 17, hjust = 1))
+
+g4 <- ggplot(relationship.statistics, aes(x=reorder(relationship,-my_initiated_messages),y=my_initiated_messages)) +
+        geom_col(stat="identity") +
+        ggtitle("My Messages Initiated") + 
+        xlab("Relationship") + 
+        theme(axis.text.x = element_text(angle = 17, hjust = 1))
+
+grid.arrange(g1, g2, g3, g4, ncol=2)
+```
+
+The bar charts help demonstrate absolute facts about how I interact with different relationship types. For instance, my conversations are dominated by my best friends and love interests. However, I initiated conversations with my friends more than I did with love interests. This thinking lead me to explore relative statistics about my interactions with relationships to see how my messanger behavior compares across groups.
+
+---
+
+**$2.$ My Relative Chat Behavior by Relationship Type**
+
+After looking at the general distribution of my Facebook messenger activity, I wanted to explore how my interactions with people change relative to our relationship. Specifically, I looked to identify correlations between relationship type and the share of words in the conversation that were sent by me (*my_word_share*, the share of messages in each conversation that were sent by me (*my_msg_share*) and the share of conversation initiations (first message in a 24 hour idle period) that I initiated (*share_of_conv_inits_by_me*). *my_word_share* and *my_msg_share* are intended to capture my engagement in each conversation, while *share_of_conv_inits_by_me* is intended to capture how commited I am to keeping conversations active.
+
+Below is an interactive parallel coordinates plot, which helps show how relative statistics compare across groups. Note, you can interact with the plot by reordering columns and isolating select trends through clicking and dragging.
+
+``` {r fig.width=10, fig.height=5, include=TRUE ,echo=FALSE}
+library(parcoords)
+
+relationship.statistics  %>% select(c('relationship','my_word_share','my_msg_share','share_of_conv_inits_by_me')) %>%
+  parcoords(
+    rownames = F 
+    , brushMode = "1D-axes"
+    , reorderable = T
+    , queue = T,
+      color = list(
+        colorBy = "relationship"
+        ,colorScale = htmlwidgets::JS("d3.scale.category10()") 
+      )
+    )
+```
+
+Below are a few noteable takeaways from this chart:
+
+1. Relative to my friends, I am more likely to be engaged in conversations with my family, but do not initiate those conversations as frequently. In fact, my family is the only group where I contribute more words and messages to the conversations than other members of the conversation. (sample conversation: Brian:"hey dad, did you watch the end of the 76ers game?!", Dad: "yes.").
+
+2. I am less engaged and less likely to be the one to initiate conversations with my best friends on Facebook messanger than I am with my best friends. (Yikes, hopefully because I talk with them more regularly over the phone.).
+
+3. My chat behavior with love interests are similar to that of friends. However, I am slightly less engaged and less willing to initiate those conversations. (Playing hard to get?)
+
+
+---
+
+
+**$3.$ Relative Trends in Conversation Sentiment**
+
+In the "Facebook Message Analysis.py" file, I scored each message with a value from 0 to 1 based on the message text, which provides a positivity index for the context of the message. For example, a message of "Great!" would receive an index of 1 and "ew, gross!" would receive a positivity index of 0. In this analysis, I looked at two specific conversations to see how sentiment changed over time. Below is a scatter plot with points for each message, overlayed with a localized regression that tracks relative changes in sentiment.
+
+``` {r fig.width=10, fig.height=5, include=TRUE ,echo=FALSE}
+library(tidyverse)
+library(lubridate)
+
+sentiment.comparison.DG <- fb %>% filter(conversation_name %in%  c('Dan_Gannon') & photo_sent==0) %>%
+                                   mutate(date2=as.Date(date, "%B %d, %Y"))
+
+ggplot(sentiment.comparison.DG, aes(x=date2, y=positivity_score,color=user)) + 
+    geom_point(alpha=.1) +
+    geom_smooth() + 
+    coord_cartesian(ylim=c(0, .5))+
+      ggtitle("Trend in Positivity of Messages with Dan")
+
+
+
+```
+
+My friend Dan moved to Madison, WI in 2014. Leading up to that time, we spoke more frequently on Facebook messanger than we do now, which is indicated by the density in messages over that period. Dan is an extremely positive person, which can be seen in his relatively higher positivity scores. It is clear to me that I could benefit from talking to Dan more frequently than I currently am.
+
+``` {r fig.width=10, fig.height=5, include=TRUE ,echo=FALSE}
+library(tidyverse)
+library(lubridate)
+
+sentiment.comparison.RE <- fb %>% filter(conversation_name %in%  c('Rachel_Ellen') & photo_sent==0) %>%
+                                   mutate(date2=as.Date(date, "%B %d, %Y"))
+
+
+ggplot(sentiment.comparison.RE, aes(x=date2, y=positivity_score,color=user)) + 
+      geom_point(alpha=.1) +
+      geom_smooth()  +
+      coord_cartesian(ylim=c(0, .5)) +
+      ggtitle("Trend in Positivity of Messages with Rachel")
+
+
+```
+
+My friend Rachel moved to Colombia in 2013. There was a time from 2014 to 2016 where we talked less frequently than we do now, which is indicated by the sparseness in messages over that period. During that time, Rachel's message contained less positivity than normal. Since 2017, we have been talking over Facebook more frequently, and I'm glad to see she has more positive things to say to me.
+
